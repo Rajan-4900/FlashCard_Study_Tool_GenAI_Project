@@ -13,11 +13,19 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # CORS for frontend communication
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    CORS(app, resources={r"/api/.*": {"origins": "*"}})
 
     # Initialize extensions with app
     bcrypt.init_app(app)
     jwt.init_app(app)
+
+    # Error handlers
+    @app.errorhandler(405)
+    def method_not_allowed(e):
+        return jsonify({
+            'error': 'method_not_allowed',
+            'message': 'The method is not allowed for the requested URL. Please use the correct HTTP method (e.g., POST for login/register).'
+        }), 405
 
     # JWT error handlers
     @jwt.unauthorized_loader
