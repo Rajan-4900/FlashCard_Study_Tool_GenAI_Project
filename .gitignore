@@ -1,0 +1,18 @@
+
+# Python
+study_management_backend/.venv/
+study_management_backend/__pycache__/
+study_management_backend/*.db
+study_management_backend/*.log
+
+# Node
+study_management_frontend/node_modules/
+study_management_frontend/dist/
+study_management_frontend/.env
+study_management_frontend/.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.DS_Store
