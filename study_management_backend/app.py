@@ -1,8 +1,10 @@
 from flask import Flask, jsonify
 from config.settings import Config
-from models import bcrypt
+from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
+
+bcrypt = Bcrypt()
 
 def create_app(config_class=Config):
     app = Flask(__name__)
