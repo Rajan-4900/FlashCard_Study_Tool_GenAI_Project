@@ -114,7 +114,7 @@ export default function AdminPanelPage() {
                   sessions.map((s) => (
                     <tr key={s.id} className="hover:bg-slate-50/60">
                       <td className="px-4 py-3 text-sm font-medium text-slate-900">
-                        {s.username || '—'}
+                        {s.username || (s.user_id ? `ID: ${s.user_id.substring(0, 8)}...` : 'Unknown Student')}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-700">
                         <span className="font-semibold text-slate-900">
