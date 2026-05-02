@@ -1,49 +1,68 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db
-from models.user import User
+from firebase_config import db
 
 profile_bp = Blueprint('profile', __name__, url_prefix='/api')
+
 
 @profile_bp.route('/profile', methods=['GET', 'PUT'])
 @jwt_required()
 def manage_profile():
-    current_user_id = int(get_jwt_identity())
-    user = User.query.get(current_user_id)
-    
-    if not user:
+    current_user_id = get_jwt_identity()
+
+    user_ref = db.collection("users").document(current_user_id)
+    user_doc = user_ref.get()
+
+    if not user_doc.exists:
         return jsonify({'error': 'User not found'}), 404
 
+    user_data = user_doc.to_dict()
+    user_data["id"] = user_doc.id
+
     if request.method == 'GET':
-        return jsonify({'user': user.to_dict()}), 200
+        # never expose password
+        user_data.pop("password", None)
+        return jsonify({'user': user_data}), 200
 
     if request.method == 'PUT':
         data = request.get_json()
-        
-        if 'name' in data:
-            user.name = data['name']
-        if 'email' in data:
-            # Check if email is already taken by another user
-            existing = User.query.filter(User.email == data['email'], User.id != user.id).first()
-            if existing:
-                return jsonify({'error': 'Email is already in use by another account.'}), 400
-            user.email = data['email']
-        if 'phone' in data:
-            user.phone = data['phone']
-        if 'profile_image' in data:
-            user.profile_image = data['profile_image']
-        if 'college' in data:
-            user.college = data['college']
-        if 'semester' in data:
-            user.semester = data['semester']
-        if 'year' in data:
-            user.year = data['year']
-        if 'college_address' in data:
-            user.college_address = data['college_address']
+        update_data = {}
 
-        try:
-            db.session.commit()
-            return jsonify({'message': 'Profile updated successfully', 'user': user.to_dict()}), 200
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({'error': 'Internal server error'}), 500
+        # email uniqueness check
+        if 'email' in data:
+            existing_users = db.collection("users").where("email", "==", data['email']).stream()
+            for existing in existing_users:
+                if existing.id != current_user_id:
+                    return jsonify({'error': 'Email is already in use by another account.'}), 400
+            update_data["email"] = data["email"]
+
+        if 'name' in data:
+            update_data["name"] = data["name"]
+
+        if 'phone' in data:
+            update_data["phone"] = data["phone"]
+
+        if 'profile_image' in data:
+            update_data["profile_image"] = data["profile_image"]
+
+        if 'college' in data:
+            update_data["college"] = data["college"]
+
+        if 'semester' in data:
+            update_data["semester"] = data["semester"]
+
+        if 'year' in data:
+            update_data["year"] = data["year"]
+
+        if 'college_address' in data:
+            update_data["college_address"] = data["college_address"]
+
+        user_ref.update(update_data)
+
+        user_data.update(update_data)
+        user_data.pop("password", None)
+
+        return jsonify({
+            'message': 'Profile updated successfully',
+            'user': user_data
+        }), 200

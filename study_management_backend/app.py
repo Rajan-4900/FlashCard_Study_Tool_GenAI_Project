@@ -1,6 +1,6 @@
 from flask import Flask, jsonify
 from config.settings import Config
-from models import db, bcrypt
+from models import bcrypt
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 
@@ -8,15 +8,14 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # Allow the React dev server (and other origins) to call this API from the browser.
+    # CORS for frontend communication
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     # Initialize extensions
-    db.init_app(app)
     bcrypt.init_app(app)
     jwt = JWTManager(app)
 
-    # Custom JWT error handlers
+    # JWT error handlers
     @jwt.unauthorized_loader
     def missing_token_callback(error):
         return jsonify({
@@ -38,6 +37,7 @@ def create_app(config_class=Config):
             'message': 'The token has expired.'
         }), 401
 
+    # Import routes
     from routes.auth import auth_bp
     from routes.student import student_bp
     from routes.admin import admin_bp
@@ -50,37 +50,12 @@ def create_app(config_class=Config):
     app.register_blueprint(study_bp)
     app.register_blueprint(profile_bp)
 
-    # Create database tables if they don't exist
-    with app.app_context():
-        db.create_all()
-        
-        # Ensure category column exists in flashcards
-        from sqlalchemy import text
-        try:
-            db.session.execute(text("ALTER TABLE flashcards ADD COLUMN category VARCHAR(80) NOT NULL DEFAULT 'General'"))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-
-        try:
-            db.session.execute(text("ALTER TABLE users ADD COLUMN name VARCHAR(120)"))
-            db.session.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(120)"))
-            db.session.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(20)"))
-            db.session.execute(text("ALTER TABLE users ADD COLUMN profile_image TEXT"))
-            db.session.execute(text("ALTER TABLE users ADD COLUMN college VARCHAR(200)"))
-            db.session.execute(text("ALTER TABLE users ADD COLUMN semester VARCHAR(50)"))
-            db.session.execute(text("ALTER TABLE users ADD COLUMN year VARCHAR(50)"))
-            db.session.execute(text("ALTER TABLE users ADD COLUMN college_address TEXT"))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-
-    # Basic root route
     @app.route('/', methods=['GET'])
     def index():
-        return jsonify({'message': 'Welcome to the Study Management System API'})
+        return jsonify({'message': 'Welcome to Firebase Study Management API'})
 
     return app
+
 
 if __name__ == '__main__':
     app = create_app()

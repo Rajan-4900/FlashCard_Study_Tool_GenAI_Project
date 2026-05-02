@@ -16,3 +16,9 @@ study_management_frontend/.env.local
 .idea/
 *.swp
 *.DS_Store
+
+# Secrets
+**/*.env
+**/*.env.local
+**/firebase_key.json
+firebase_key.json

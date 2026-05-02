@@ -1,12 +1,10 @@
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt
-from models import db
-from models.user import User
-from models.flashcard import Flashcard
-from models.session_progress import SessionProgress
+from firebase_config import db
 from functools import wraps
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api')
+
 
 def admin_required():
     def wrapper(fn):
@@ -20,57 +18,93 @@ def admin_required():
         return decorator
     return wrapper
 
+
 @admin_bp.route('/users', methods=['GET'])
 @admin_required()
 def get_all_users():
-    users = User.query.all()
-    return jsonify({'users': [user.to_dict() for user in users]}), 200
+    users_stream = db.collection("users").stream()
+    users = []
 
-@admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
+    for user in users_stream:
+        user_data = user.to_dict()
+        user_data["id"] = user.id
+        user_data.pop("password", None)
+        users.append(user_data)
+
+    return jsonify({'users': users}), 200
+
+
+@admin_bp.route('/users/<user_id>', methods=['DELETE'])
 @admin_required()
 def delete_user(user_id):
-    user = User.query.get(user_id)
-    if not user:
+    user_ref = db.collection("users").document(user_id)
+    user_doc = user_ref.get()
+
+    if not user_doc.exists:
         return jsonify({'error': 'User not found'}), 404
-        
-    try:
-        db.session.delete(user)
-        db.session.commit()
-        return jsonify({'message': f'User {user_id} and their flashcards deleted successfully'}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'Internal server error'}), 500
+
+    # delete user's flashcards too
+    cards = db.collection("flashcards").where("user_id", "==", user_id).stream()
+    for card in cards:
+        db.collection("flashcards").document(card.id).delete()
+
+    user_ref.delete()
+
+    return jsonify({'message': f'User {user_id} and their flashcards deleted successfully'}), 200
+
 
 @admin_bp.route('/cards/all', methods=['GET'])
 @admin_required()
 def get_all_cards():
-    cards = Flashcard.query.all()
-    return jsonify({'cards': [card.to_dict() for card in cards]}), 200
+
+    # 🔥 Step 1: Fetch users
+    users_stream = db.collection("users").stream()
+
+    user_map = {}
+    role_map = {}
+
+    for user in users_stream:
+        data = user.to_dict()
+        username = data.get("username", "Unknown")
+        role = data.get("role", "student")
+        
+        # normalize ID
+        user_map[str(user.id)] = username
+        role_map[str(user.id)] = role
+
+    # 🔥 Step 2: Fetch flashcards
+    cards_stream = db.collection("flashcards").stream()
+    cards = []
+
+    for card in cards_stream:
+        card_data = card.to_dict()
+        if not card_data:
+            continue
+            
+        card_data["id"] = card.id
+
+        # Get user_id safely
+        raw_user_id = card_data.get("user_id")
+        user_id = str(raw_user_id) if raw_user_id else "None"
+
+        # 🔥 Map the fields the Frontend expects
+        card_data["owner_username"] = user_map.get(user_id, "Unknown")
+        card_data["owner_role"] = role_map.get(user_id, "student")
+
+        cards.append(card_data)
+
+    return jsonify({'cards': cards}), 200
 
 
 @admin_bp.route('/progress/sessions', methods=['GET'])
 @admin_required()
 def get_session_progress():
-    """
-    Returns recent study session summaries for admin dashboard.
-    """
-    sessions = (
-        SessionProgress.query.join(User)
-        .order_by(SessionProgress.completed_at.desc())
-        .limit(200)
-        .all()
-    )
+    sessions_stream = db.collection("study_sessions").stream()
+    sessions = []
 
-    return jsonify({
-        'sessions': [
-            {
-                **s.to_dict(),
-                'username': s.user.username if s.user else None,
-                'role': s.user.role if s.user else None,
-                'status': 'completed',
-            }
-            for s in sessions
-            # Optional: hide admin rows to focus on students
-            if not s.user or s.user.role != 'admin'
-        ]
-    }), 200
+    for session in sessions_stream:
+        session_data = session.to_dict()
+        session_data["id"] = session.id
+        sessions.append(session_data)
+
+    return jsonify({'sessions': sessions}), 200

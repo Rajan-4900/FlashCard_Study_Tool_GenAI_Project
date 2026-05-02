@@ -1,85 +1,115 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token
-from models import db
-from models.user import User
+from firebase_config import db
+from werkzeug.security import generate_password_hash, check_password_hash
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api')
+
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
-    
-    # Input validation
+
     if not data or not data.get('username') or not data.get('password'):
         return jsonify({'error': 'Username and password are required'}), 400
-        
+
     username = data.get('username')
     password = data.get('password')
-    role = 'student' # Force all new registrations to be students
-    
+    role = 'student'
+
     if username.lower() == 'admin':
         return jsonify({'error': 'Username reserved'}), 409
-    
-    # Check if user exists
-    existing_user = User.query.filter_by(username=username).first()
-    if existing_user:
+
+    # Check existing user in Firebase
+    users = db.collection("users").where("username", "==", username).stream()
+    for user in users:
         return jsonify({'error': 'Username already exists'}), 409
-        
-    # Create new user
-    new_user = User(username=username, role=role)
-    new_user.set_password(password)
-    
-    try:
-        db.session.add(new_user)
-        db.session.commit()
-        return jsonify({'message': 'User registered successfully', 'user': new_user.to_dict()}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'Internal server error'}), 500
+
+    hashed_password = generate_password_hash(password)
+
+    new_user = {
+        "username": username,
+        "password": hashed_password,
+        "role": role
+    }
+
+    doc_ref = db.collection("users").add(new_user)
+    user_id = doc_ref[1].id
+
+    new_user["id"] = user_id
+    del new_user["password"]
+
+    return jsonify({
+        'message': 'User registered successfully',
+        'user': new_user
+    }), 201
+
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    
-    # Input validation
+
     if not data or not data.get('username') or not data.get('password'):
         return jsonify({'error': 'Username and password are required'}), 400
-        
+
     username = data.get('username')
     password = data.get('password')
-    
-    # Hardcoded admin login logic
+
+    # Admin fixed login
     if username == "Admin" and password == "Admin":
-        admin_user = User.query.filter_by(username="Admin").first()
-        if not admin_user:
-            admin_user = User(username="Admin", role="admin")
-            admin_user.set_password("Admin")
-            db.session.add(admin_user)
-            db.session.commit()
-            
-        access_token = create_access_token(identity=str(admin_user.id), additional_claims={'role': 'admin'})
+        users = db.collection("users").where("username", "==", "Admin").stream()
+        admin_doc = None
+
+        for user in users:
+            admin_doc = user
+
+        if not admin_doc:
+            admin_data = {
+                "username": "Admin",
+                "password": generate_password_hash("Admin"),
+                "role": "admin"
+            }
+            doc_ref = db.collection("users").add(admin_data)
+            admin_id = doc_ref[1].id
+        else:
+            admin_id = admin_doc.id
+
+        access_token = create_access_token(identity=str(admin_id), additional_claims={'role': 'admin'})
+
         return jsonify({
             'message': 'Login successful',
             'access_token': access_token,
-            'user': admin_user.to_dict()
+            'user': {
+                "id": admin_id,
+                "username": "Admin",
+                "role": "admin"
+            }
         }), 200
 
-    # Find user
-    user = User.query.filter_by(username=username).first()
-    
-    # Check password
-    if user and user.check_password(password):
-        # Prevent any other admin user from logging in
-        if user.role == 'admin' and user.username != "Admin":
-            return jsonify({'error': 'Invalid username or password'}), 401
-            
-        # Create JWT token
-        # You can also pass additional claims like user role
-        access_token = create_access_token(identity=str(user.id), additional_claims={'role': user.role})
-        return jsonify({
-            'message': 'Login successful',
-            'access_token': access_token,
-            'user': user.to_dict()
-        }), 200
-        
+    # Find normal user
+    users = db.collection("users").where("username", "==", username).stream()
+    found_user = None
+
+    for user in users:
+        found_user = user
+
+    if found_user:
+        user_data = found_user.to_dict()
+
+        if check_password_hash(user_data["password"], password):
+            access_token = create_access_token(
+                identity=str(found_user.id),
+                additional_claims={'role': user_data["role"]}
+            )
+
+            return jsonify({
+                'message': 'Login successful',
+                'access_token': access_token,
+                'user': {
+                    "id": found_user.id,
+                    "username": user_data["username"],
+                    "role": user_data["role"]
+                }
+            }), 200
+
     return jsonify({'error': 'Invalid username or password'}), 401
