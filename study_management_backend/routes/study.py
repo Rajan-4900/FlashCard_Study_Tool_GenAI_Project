@@ -56,9 +56,16 @@ def save_session_progress():
     current_user_id = get_jwt_identity()
     data = request.get_json() or {}
 
+    # 🔥 Fetch username to persist it in the session record
+    user_doc = db.collection("users").document(current_user_id).get()
+    username = "Student"
+    if user_doc.exists:
+        username = user_doc.to_dict().get("username", "Student")
+
     # Logic to save session summary
     session_data = {
         "user_id": current_user_id,
+        "username": username, # Persist name so it survives user deletion
         "total_questions": data.get('total_questions'),
         "correct_answers": data.get('correct_answers'),
         "wrong_answers": data.get('wrong_answers'),
