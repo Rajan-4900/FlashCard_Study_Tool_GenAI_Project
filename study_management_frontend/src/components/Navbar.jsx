@@ -34,7 +34,7 @@ export default function Navbar() {
           to={isAuthenticated ? "/dashboard" : "/"} 
           className="flex items-center gap-3 group transition-opacity hover:opacity-90"
         >
-          <div className="h-10 w-10 overflow-hidden rounded-xl shadow-sm bg-white border border-slate-100 group-hover:border-indigo-200 transition-colors">
+          <div className="h-10 w-10 overflow-hidden rounded-2xl shadow-sm bg-white border border-slate-100 group-hover:border-indigo-200 transition-colors">
             <img src="/logo.png" alt="Study Manager Logo" className="h-full w-full object-cover" />
           </div>
           <div className="leading-tight">
