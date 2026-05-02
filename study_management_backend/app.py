@@ -4,7 +4,9 @@ from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 
+# Initialize extensions globally
 bcrypt = Bcrypt()
+jwt = JWTManager()
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -13,9 +15,9 @@ def create_app(config_class=Config):
     # CORS for frontend communication
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-    # Initialize extensions
+    # Initialize extensions with app
     bcrypt.init_app(app)
-    jwt = JWTManager(app)
+    jwt.init_app(app)
 
     # JWT error handlers
     @jwt.unauthorized_loader
@@ -46,12 +48,14 @@ def create_app(config_class=Config):
     from routes.study import study_bp
     from routes.profile import profile_bp
 
+    # Register blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(student_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(study_bp)
     app.register_blueprint(profile_bp)
 
+    # Home route
     @app.route('/', methods=['GET'])
     def index():
         return jsonify({'message': 'Welcome to Firebase Study Management API'})
@@ -59,6 +63,9 @@ def create_app(config_class=Config):
     return app
 
 
+# ---------------- IMPORTANT FOR RENDER ----------------
+# This is what Gunicorn will use
+app = create_app()
+
 if __name__ == '__main__':
-    app = create_app()
     app.run(debug=True, host='0.0.0.0', port=5000)
